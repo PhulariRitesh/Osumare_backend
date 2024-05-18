@@ -1,4 +1,6 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const config = require('./config');
 const app = express();
 const port = 5000;
 
@@ -10,15 +12,68 @@ let tasks = [
     {id:3,title:'Task 3',description:'Description 3'},
     {id:4,title:'Task 4',description:'Description 4'},
 ];
-app.get('/GET/tasks', (req, res) => {
+
+const sortTasks = (tasks, sortBy) => {
+    if(sortBy === 'asc'){
+        tasks.sort((a, b) => a.id - b.id);
+    }
+    else if(sortBy === 'desc'){
+        tasks.sort((a, b) => b.id - a.id);
+    }
+    return tasks;
+}
+
+Authorizations
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+});
+
+
+const authentication = (req, res, next) => {
+
+    const token = req.headers['authorization'];
+
+    if (token == null) {
+        return res.status(400).send('Unauthorized');
+    }
+
+    jwt.verify(token, config.secret, (err, user) => {
+        if (err) {
+            return res.status(404).send('Error occured');
+        }
+        req.user = user;
+        next();
+    });
+};
+
+
+
+app.get('/GET/tasks',(req, res) => {
     try{
+        const {page, limit,sortBy,order,filterBy,filterValue} = req.query;
+
+        let filteredTasks = tasks;
+        if(filterBy && filterValue){
+            filteredTasks = tasks.filter(task => task[filterBy] == filterValue);
+        }
+        if(sortBy && order){
+            filteredTasks = sortTasks(filteredTasks, order);
+        }
+
+        const startIndex = (page - 1) * limit;
+        const endIndex = page * limit;
     if(tasks.length == 0){
         res.status(404).send('No tasks found');
         return;
     }
+    else if(page && limit){
+        const slicedTasks = filteredTasks.slice(startIndex, endIndex);
+        res.status(200).send('success');
+        res.json(slicedTasks);
+    }
     else{
         res.status(200).send('success');
-        res.json(tasks);
+        res.json(filteredTasks);
     }
 }
     catch(err){
@@ -44,7 +99,7 @@ app.get('/GET/tasks/:id', (req, res) => {
 }
 });
 
-app.post('/POST/tasks', (req, res) => {
+app.post('/POST/tasks',authentication, (req, res) => {
     try{
     if(!req.body.title){
         res.status(404).send('Title is required');
@@ -62,7 +117,7 @@ app.post('/POST/tasks', (req, res) => {
     }
 });
 
-app.put('/PUT/tasks/:id', (req, res) => {
+app.put('/PUT/tasks/:id',authentication, (req, res) => {
     try{
     const id = req.params.id;
     const task = tasks.find(task => task.id == id);
@@ -91,7 +146,7 @@ app.put('/PUT/tasks/:id', (req, res) => {
     }
 });
 
-app.delete('/DELETE/tasks/:id', (req, res) => {
+app.delete('/DELETE/tasks/:id',authentication, (req, res) => {
     try{
     const id = req.params.id;
     const task = tasks.find(task => task.id == id);
